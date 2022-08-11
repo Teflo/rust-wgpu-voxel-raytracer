@@ -207,9 +207,14 @@ impl State {
 
     fn update(&mut self) {
         let mut voxel_octree = voxel::voxel::VoxelOctree::new();
-        let root = voxel_octree.get_root_mut();
-        voxel_octree.add_node(&mut *root, 0);
-        voxel_octree.add_node(&mut *root, 2);
+        let root = voxel_octree.root;
+        let node1 = voxel_octree.add_node(root, 0).unwrap();
+        let node2 = voxel_octree.add_node(root, 2).unwrap();
+
+        voxel_octree.add_node(node1, 0).unwrap();
+        voxel_octree.add_node(node1, 1).unwrap();
+        voxel_octree.add_node(node2, 0).unwrap();
+        voxel_octree.add_node(node2, 7).unwrap();
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {

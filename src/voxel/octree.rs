@@ -1,33 +1,42 @@
-use std::borrow::{Borrow, BorrowMut};
-use std::cmp::PartialEq;
-use std::default::Default;
-use std::ops::Index;
+use std::{
+    cmp::PartialEq,
+    default::Default,
+    fmt::Debug,
+};
 use Vec;
 
+#[derive(Debug)]
 pub enum AddChildError {
     AlreadyAdded,
     OutOfBounds,
+    NodeNotExisting,
 }
-
-const EMPTY_NODE: u32 = u32::MAX;
 
 #[derive(Default)]
 pub struct Octree<T> where T: Default + PartialEq {
     nodes: Vec<Node>,
     data: Vec<T>,
-    root: u32,
+    pub root: u32,
 }
 
 #[derive(Default)]
 pub struct Node {
-    index: u32,
-    children: [u32; 8],
-    data: u32,
+    children: [Option<u32>; 8],
+    data: Option<u32>,
 }
 
 
 impl<T> Octree<T> where T: Default + PartialEq {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        let mut new = Self::default();
+        new.add_root();
+        new
+    }
+
+    fn add_root(&mut self) {
+        self.nodes.push(Node::new());
+        self.root = self.nodes.len() as u32 - 1;
+    }
 
     pub fn get_node(&mut self, i: usize) -> &Node {
         &self.nodes[i]
@@ -37,6 +46,8 @@ impl<T> Octree<T> where T: Default + PartialEq {
         &mut self.nodes[i]
     }
 
+    pub fn get_child(&mut self, node_index: u32, i: usize) -> &Node { self.get_node(self.nodes[node_index as usize].children[i].unwrap() as usize) }
+
     pub fn get_root(&mut self) -> &Node {
         &self.nodes[self.root as usize]
     }
@@ -45,23 +56,28 @@ impl<T> Octree<T> where T: Default + PartialEq {
         &mut self.nodes[self.root as usize]
     }
 
-    pub fn add_node(&mut self, node: &mut Node, i: usize) -> Result<&mut Self, AddChildError> {
-        if (node.children[i] != EMPTY_NODE) { Err(AddChildError::AlreadyAdded) } else if (i >= 8) { Err(AddChildError::OutOfBounds) } else {
-            let mut newNode = Node::new();
-            let index = self.nodes.len() as u32;
-            newNode.index = index;
-            node.children[i] = index;
-            self.nodes.push(newNode);
-            Ok(self)
+    pub fn add_node(&mut self, node_index: u32, i: usize) -> Result<u32, AddChildError> {
+        if i >= 8 { return Err(AddChildError::OutOfBounds); }
+        let node = &mut self.nodes[node_index as usize];
+        let mut child = node.children[i];
+        match child {
+            Some(_) => Err(AddChildError::AlreadyAdded),
+            None => {
+                let mut new_node = Node::new();
+                let index = self.nodes.len() as u32;
+                node.children[i].map(|_| index);
+                self.nodes.push(new_node);
+                Ok(index)
+            }
         }
     }
 
     pub fn add_data(&mut self, node: &mut Node, data: T) {
         match self.data.iter().position(|x| x == &data) {
-            Some(index) => { node.data = index as u32; }
+            Some(index) => { node.data = Some(index as u32); }
             None => {
                 self.data.push(data);
-                node.index = (self.data.len() - 1) as u32;
+                node.data = Some((self.data.len() - 1) as u32);
             }
         }
     }
