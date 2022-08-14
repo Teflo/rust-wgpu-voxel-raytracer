@@ -1,9 +1,12 @@
-use std::cmp::PartialEq;
-use std::default::Default;
+use std::{
+    cmp::PartialEq,
+    default::Default,
+    fmt::Debug,
+};
 
 use crate::voxel::octree::Octree;
 
-#[derive(Default, PartialEq)]
+#[derive(Default, PartialEq, Debug)]
 pub struct VoxelData {
     material: u8,
 }

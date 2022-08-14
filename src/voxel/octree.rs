@@ -1,8 +1,9 @@
 use std::{
     cmp::PartialEq,
     default::Default,
-    fmt::Debug,
+    fmt::{Debug, Display, Error, Formatter},
 };
+use std::option::IntoIter;
 use Vec;
 
 #[derive(Debug)]
@@ -12,14 +13,14 @@ pub enum AddChildError {
     NodeNotExisting,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Octree<T> where T: Default + PartialEq {
     nodes: Vec<Node>,
     data: Vec<T>,
     pub root: u32,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Node {
     children: [Option<u32>; 8],
     data: Option<u32>,
@@ -58,15 +59,15 @@ impl<T> Octree<T> where T: Default + PartialEq {
 
     pub fn add_node(&mut self, node_index: u32, i: usize) -> Result<u32, AddChildError> {
         if i >= 8 { return Err(AddChildError::OutOfBounds); }
-        let node = &mut self.nodes[node_index as usize];
-        let mut child = node.children[i];
+
+        let child = self.nodes[node_index as usize].children[i];
         match child {
             Some(_) => Err(AddChildError::AlreadyAdded),
             None => {
-                let mut new_node = Node::new();
+                let new_node = Node::new();
                 let index = self.nodes.len() as u32;
-                node.children[i].map(|_| index);
                 self.nodes.push(new_node);
+                self.nodes[node_index as usize].children[i] = Some(index);
                 Ok(index)
             }
         }
@@ -81,8 +82,68 @@ impl<T> Octree<T> where T: Default + PartialEq {
             }
         }
     }
+
+    pub fn traverse(&self) -> Vec<u32> {
+        let mut result = Vec::new();
+        let mut stack = Vec::new();
+        stack.push(self.root);
+        while !stack.is_empty() {
+            let index = stack.pop();
+            if index.is_none() { continue; }
+            result.push(index.unwrap());
+            let node = &self.nodes[index.unwrap() as usize];
+            for i in (0..8).rev() {
+                match node.children[i] {
+                    None => {}
+                    Some(child) => {
+                        stack.push(child);
+                    }
+                }
+            }
+        }
+        result
+    }
+}
+/*
+impl Display for Octree<T> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        let mut display = String::new();
+        let mut node_index = self.root;
+        let mut node = self.nodes[node_index];
+        while true {
+            display.push_str("[");
+
+            display.push_str("]");
+        }
+    }
 }
 
+impl<'a, T> IntoIterator for Octree<T> {
+    type Item = &'a Node;
+    type IntoIter = std::vec::IntoIter<&'a Node>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        fn append<'a, T>(node : Node, v : &mut Vec<&'a Node>) {
+            for i in 0..node.children.len()-1 {
+                match node.children[i] {
+                    Some(node_index) => {
+                        let child = &'a self.nodes[node_index];
+                        v.push(child);
+                        v.extend(append())
+                    },
+                    None => {
+
+                    }
+                }
+            }
+        }
+
+        let mut result = Vec::new();
+        append(self, &mut result);
+        result.into_iter()
+    }
+}
+*/
 impl Node {
     pub fn new() -> Self { Self::default() }
 }

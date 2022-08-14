@@ -44,6 +44,7 @@ pub async fn run() {
     }
 
     let mut state = State::new(&window).await;
+    state.init();
 
     event_loop.run(move |event, _, control_flow| match event {
         Event::WindowEvent {
@@ -205,7 +206,7 @@ impl State {
         false
     }
 
-    fn update(&mut self) {
+    fn init(&mut self) {
         let mut voxel_octree = voxel::voxel::VoxelOctree::new();
         let root = voxel_octree.root;
         let node1 = voxel_octree.add_node(root, 0).unwrap();
@@ -215,7 +216,11 @@ impl State {
         voxel_octree.add_node(node1, 1).unwrap();
         voxel_octree.add_node(node2, 0).unwrap();
         voxel_octree.add_node(node2, 7).unwrap();
+
+        println!("{:?}", voxel_octree.traverse());
     }
+
+    fn update(&mut self) {}
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
