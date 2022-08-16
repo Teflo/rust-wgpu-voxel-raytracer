@@ -4,6 +4,7 @@ use std::{
     fmt::{Debug, Display, Error, Formatter},
 };
 use std::option::IntoIter;
+use std::ptr::write;
 use Vec;
 
 #[derive(Debug)]
@@ -22,8 +23,24 @@ pub struct Octree<T> where T: Default + PartialEq {
 
 #[derive(Default, Debug)]
 pub struct Node {
-    children: [Option<u32>; 8],
-    data: Option<u32>,
+    pub children: [Option<u32>; 8],
+    pub data: Option<u32>,
+    pub index: u32,
+}
+
+impl Node {
+    pub fn new() -> Self { Self::default() }
+
+    pub fn to_byte(&self) -> u8 {
+        let mut byte: u8 = 0;
+        for i in 0..8 {
+            match self.children[i] {
+                None => {}
+                Some(_) => byte |= 1 << i
+            }
+        }
+        byte
+    }
 }
 
 
@@ -35,8 +52,10 @@ impl<T> Octree<T> where T: Default + PartialEq {
     }
 
     fn add_root(&mut self) {
-        self.nodes.push(Node::new());
-        self.root = self.nodes.len() as u32 - 1;
+        let mut new_node = Node::new();
+        self.root = self.nodes.len() as u32;
+        new_node.index = self.root;
+        self.nodes.push(new_node);
     }
 
     pub fn get_node(&mut self, i: usize) -> &Node {
@@ -64,8 +83,9 @@ impl<T> Octree<T> where T: Default + PartialEq {
         match child {
             Some(_) => Err(AddChildError::AlreadyAdded),
             None => {
-                let new_node = Node::new();
+                let mut new_node = Node::new();
                 let index = self.nodes.len() as u32;
+                new_node.index = index;
                 self.nodes.push(new_node);
                 self.nodes[node_index as usize].children[i] = Some(index);
                 Ok(index)
@@ -83,108 +103,81 @@ impl<T> Octree<T> where T: Default + PartialEq {
         }
     }
 
-    pub fn traverse(&self) -> Vec<u32> {
-        let mut result = Vec::new();
-        let mut stack = Vec::new();
-        stack.push(self.root);
-        while !stack.is_empty() {
-            let index = stack.pop();
-            if index.is_none() { continue; }
-            result.push(index.unwrap());
-            let node = &self.nodes[index.unwrap() as usize];
-            for i in (0..8).rev() {
-                match node.children[i] {
-                    None => {}
-                    Some(child) => {
-                        stack.push(child);
-                    }
-                }
-            }
-        }
-        result
-    }
-}
-/*
-impl Display for Octree<T> {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-        let mut display = String::new();
-        let mut node_index = self.root;
-        let mut node = self.nodes[node_index];
-        while true {
-            display.push_str("[");
-
-            display.push_str("]");
+    pub fn iter(&self) -> OctreeIter<'_, T> {
+        OctreeIter {
+            tree: &self,
+            stack: vec![self.root],
+            depth_stack: vec![],
+            depth_counter: 0,
         }
     }
 }
 
-impl<'a, T> IntoIterator for Octree<T> {
+impl<T> Display for Octree<T> where T: Default + PartialEq {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut iter = self.iter();
+        let mut i = 0;
+        while let Some(node) = iter.next() {
+            let ws = "-".repeat(iter.depth_stack.len());
+            //println!("{}", iter.depthStack.len());
+            write!(f, "{:0}Node {:1}: {:0>8b}\n", ws, node.index, node.to_byte())?;
+            i += 1;
+        }
+        Ok(())
+    }
+}
+
+pub struct OctreeIter<'a, T> where T: Default + PartialEq {
+    tree: &'a Octree<T>,
+    stack: Vec<u32>,
+    depth_stack: Vec<i32>,
+    depth_counter: i32,
+}
+
+
+impl<'a, T> Iterator for OctreeIter<'a, T> where T: Default + PartialEq {
     type Item = &'a Node;
-    type IntoIter = std::vec::IntoIter<&'a Node>;
 
-    fn into_iter(self) -> Self::IntoIter {
-        fn append<'a, T>(node : Node, v : &mut Vec<&'a Node>) {
-            for i in 0..node.children.len()-1 {
-                match node.children[i] {
-                    Some(node_index) => {
-                        let child = &'a self.nodes[node_index];
-                        v.push(child);
-                        v.extend(append())
-                    },
-                    None => {
-
-                    }
-                }
+    fn next(&mut self) -> Option<Self::Item> {
+        fn red_and_pop(stack: &mut Vec<i32>) {
+            let len = stack.len();
+            if len > 0 {
+                stack[len - 1] -= 1;
+                if stack[len - 1] < 0 { stack.pop(); }
             }
         }
 
-        let mut result = Vec::new();
-        append(self, &mut result);
-        result.into_iter()
-    }
-}
-*/
-impl Node {
-    pub fn new() -> Self { Self::default() }
-}
+        if self.stack.is_empty() { return None; }
 
-/*
-impl<T> Node<T> where T: Default {
-    pub fn new() -> Self { Self::default() }
+        //println!("pre - {:?}, {:?}", self.depth_stack, self.stack);
+        if self.depth_counter > 0 {
+            self.depth_stack.push(self.depth_counter + 1);
+        } else {
+            red_and_pop(&mut self.depth_stack);
+        }
 
-    pub fn add_node(&mut self, i: usize) -> Result<&mut Self, AddChildError> {
-        if i >= 8 { Err(AddChildError::OutOfBounds) } else if self.children[i] != EMPTY_NODE { Err(AddChildError::AlreadyAdded) } else {
-            self.children[i] =
-                Ok(self)
+        red_and_pop(&mut self.depth_stack);
+
+
+        match self.stack.pop() {
+            None => {
+                return None;
+            }
+            Some(index) => {
+                let node = &self.tree.nodes[index as usize];
+                self.depth_counter = 0;
+                for i in (0..8).rev() {
+                    match node.children[i] {
+                        None => {}
+                        Some(child) => {
+                            self.stack.push(child as u32);
+                            self.depth_counter += 1;
+                        }
+                    }
+                }
+                //println!("post - {:?}, {:?}", self.depth_stack, self.stack);
+                Some(&node)
+            }
         }
     }
-
-    pub fn set_data(&mut self, value: T) {
-        self.data = Some(value);
-    }
-    pub fn remove_node(&mut self, i: usize) -> Option<Self> {
-        if self.children.get(i).is_none() { None } else { self.children[i].take().map(|c| *c) }
-    }
-    pub fn get_node(&mut self, i: usize) -> Option<&Self> {
-        self.children[i].as_ref().map(AsRef::as_ref)
-    }
-
-    pub fn get_node_mut(&mut self, i: usize) -> Option<&mut Self> {
-        self.children[i].as_mut().map(AsMut::as_mut)
-    }
-
-    pub fn get_data(&mut self) -> Option<&T> {
-        self.data.borrow().as_ref()
-    }
-
-    pub fn get_data_mut(&mut self) -> Option<&mut T> {
-        self.data.borrow_mut().as_mut()
-    }
 }
-
-impl<T> From<Octree<T>> for Option<Box<Octree<T>>> where T: Default {
-    fn from(tree: Octree<T>) -> Self {
-        Some(Box::new(tree))
-    }
-}
- */

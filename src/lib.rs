@@ -211,13 +211,13 @@ impl State {
         let root = voxel_octree.root;
         let node1 = voxel_octree.add_node(root, 0).unwrap();
         let node2 = voxel_octree.add_node(root, 2).unwrap();
-
-        voxel_octree.add_node(node1, 0).unwrap();
+        let node3 = voxel_octree.add_node(node1, 0).unwrap();
+        let node4 = voxel_octree.add_node(root, 7).unwrap();
         voxel_octree.add_node(node1, 1).unwrap();
-        voxel_octree.add_node(node2, 0).unwrap();
-        voxel_octree.add_node(node2, 7).unwrap();
+        voxel_octree.add_node(node3, 0).unwrap();
+        voxel_octree.add_node(node3, 7).unwrap();
 
-        println!("{:?}", voxel_octree.traverse());
+        println!("{}", voxel_octree);
     }
 
     fn update(&mut self) {}
