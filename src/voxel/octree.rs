@@ -26,10 +26,16 @@ pub struct Node {
     pub children: [Option<u32>; 8],
     pub data: Option<u32>,
     pub index: u32,
+    pub flat_index: i32,
 }
 
 impl Node {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self {
+            flat_index: -1,
+            ..Self::default()
+        }
+    }
 
     pub fn to_byte(&self) -> u8 {
         let mut byte: u8 = 0;
@@ -110,6 +116,31 @@ impl<T> Octree<T> where T: Default + PartialEq {
             depth_stack: vec![],
             depth_counter: 0,
         }
+    }
+
+    pub fn serialize(&mut self) -> Vec<u8> {
+        let mut voxels = vec![];
+        let mut unreferenced = vec![];
+        for i in 0..self.nodes.len() {
+            let node = &mut self.nodes[i];
+            voxels.push(node.to_byte());
+            if node.flat_index >= 0 {
+                voxels[node.flat_index as usize] = (voxels.len() - 1) as u8;
+            }
+            for child in node.children {
+                match child {
+                    Some(c) => {
+                        voxels.push(0);
+                        let n = &mut self.nodes[c as usize];
+                        n.flat_index = (voxels.len() - 1) as i32;
+                        unreferenced.push(n);
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        return voxels;
     }
 }
 
