@@ -4,11 +4,22 @@ use std::{
     fmt::Debug,
 };
 
-use crate::voxel::octree::Octree;
+use cgmath;
+use cgmath::Vector3;
 
-#[derive(Default, PartialEq, Debug)]
+use packed_struct::prelude::*;
+
+#[derive(PackedStruct, Default, PartialEq, Debug)]
+#[packed_struct(bit_numbering = "msb0")]
 pub struct VoxelData {
-    material: u8,
+    #[packed_field(bits = "0..24")]
+    color: Vector3<f32>,
+    #[packed_field(bits = "24..32", ty = "enum")]
+    material: Material,
 }
 
-pub type VoxelOctree = Octree<VoxelData>;
+#[derive(PrimitiveEnum_u8, Default, Clone, Copy, Debug, PartialEq)]
+pub enum Material {
+    Nothing = 0,
+    Solid = 1,
+}

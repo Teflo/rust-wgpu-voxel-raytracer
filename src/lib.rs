@@ -84,7 +84,6 @@ pub async fn run() {
         Event::MainEventsCleared => {
             window.request_redraw();
         }
-        _ => {}
     });
 }
 
@@ -100,7 +99,7 @@ struct State {
 impl State {
     async fn new(window: &Window) -> Self {
         let size = window.inner_size();
-        let instance = wgpu::Instance::new(wgpu::Backends::all());
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
         let surface = unsafe { instance.create_surface(window) };
         let adapter = instance.request_adapter(
             &wgpu::RequestAdapterOptions {
@@ -218,6 +217,7 @@ impl State {
         voxel_octree.add_node(node3, 7).unwrap();
 
         println!("{}", voxel_octree);
+        println!("{:?}", voxel_octree.serialize());
     }
 
     fn update(&mut self) {}
