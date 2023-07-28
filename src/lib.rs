@@ -6,7 +6,10 @@ use winit::{
     window::{Window, WindowBuilder},
 };
 
+use crate::vdb::utils::BitCounter;
+
 mod voxel;
+mod vdb;
 
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub async fn run() {
@@ -43,51 +46,54 @@ pub async fn run() {
             .expect("Couldn't append canvas to document body.");
     }
 
-    let mut state = State::new(&window).await;
+    let mut state = State::new(window).await;
     state.init();
 
-    event_loop.run(move |event, _, control_flow| match event {
-        Event::WindowEvent {
-            ref event,
-            window_id,
-        } if window_id == window.id() => if !state.input(event) {
-            match event {
-                WindowEvent::CloseRequested
-                | WindowEvent::KeyboardInput {
-                    input:
-                    KeyboardInput {
-                        state: ElementState::Pressed,
-                        virtual_keycode: Some(VirtualKeyCode::Escape),
+    event_loop.run(move |event, _, control_flow|
+        match event {
+            Event::WindowEvent {
+                ref event,
+                window_id,
+            } if window_id == state.window.id() => if !state.input(event) {
+                match event {
+                    WindowEvent::CloseRequested
+                    | WindowEvent::KeyboardInput {
+                        input:
+                        KeyboardInput {
+                            state: ElementState::Pressed,
+                            virtual_keycode: Some(VirtualKeyCode::Escape),
+                            ..
+                        },
                         ..
-                    },
-                    ..
-                } => *control_flow = ControlFlow::Exit,
+                    } => *control_flow = ControlFlow::Exit,
 
-                WindowEvent::Resized(physical_size) => {
-                    state.resize(*physical_size);
+                    WindowEvent::Resized(physical_size) => {
+                        state.resize(*physical_size);
+                    }
+                    WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
+                        state.resize(**new_inner_size);
+                    }
+                    _ => {}
                 }
-                WindowEvent::ScaleFactorChanged { new_inner_size, .. } => {
-                    state.resize(**new_inner_size);
+            },
+            Event::RedrawRequested(window_id) if window_id == state.window.id() => {
+                state.update();
+                match state.render() {
+                    Ok(_) => {}
+                    Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => state.resize(state.size),
+                    Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                    Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface Timeout!")
                 }
-                _ => {}
             }
-        },
-        Event::RedrawRequested(window_id) if window_id == window.id() => {
-            state.update();
-            match state.render() {
-                Ok(_) => {}
-                Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => state.resize(state.size),
-                Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
-                Err(wgpu::SurfaceError::Timeout) => log::warn!("Surface Timeout!")
-            }
-        }
-        Event::MainEventsCleared => {
-            window.request_redraw();
-        }
+            Event::MainEventsCleared => {
+                state.window.request_redraw();
+            },
+            _ => {}
     });
 }
 
 struct State {
+    window: Window,
     surface: wgpu::Surface,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -97,10 +103,13 @@ struct State {
 }
 
 impl State {
-    async fn new(window: &Window) -> Self {
+    async fn new(window: Window) -> Self {
         let size = window.inner_size();
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
-        let surface = unsafe { instance.create_surface(window) };
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor{
+            backends: wgpu::Backends::all(),
+            dx12_shader_compiler: Default::default()
+        });
+        let surface = unsafe { instance.create_surface(&window) }.unwrap();
         let adapter = instance.request_adapter(
             &wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -122,12 +131,20 @@ impl State {
             None,
         ).await.unwrap();
 
+        let surface_caps = surface.get_capabilities(&adapter);
+        let surface_format = surface_caps.formats.iter()
+            .copied()
+            .find(|f| f.is_srgb())
+            .unwrap_or(surface_caps.formats[0]); 
+
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface.get_supported_formats(&adapter)[0],
+            format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
+            present_mode: surface_caps.present_modes[0],
+            alpha_mode: surface_caps.alpha_modes[0],
+            view_formats: vec![]
         };
         surface.configure(&device, &config);
 
@@ -183,6 +200,7 @@ impl State {
         );
 
         Self {
+            window,
             surface,
             device,
             queue,
@@ -206,18 +224,12 @@ impl State {
     }
 
     fn init(&mut self) {
-        let mut voxel_octree = voxel::voxel::VoxelOctree::new();
-        let root = voxel_octree.root;
-        let node1 = voxel_octree.add_node(root, 0).unwrap();
-        let node2 = voxel_octree.add_node(root, 2).unwrap();
-        let node3 = voxel_octree.add_node(node1, 0).unwrap();
-        let node4 = voxel_octree.add_node(root, 7).unwrap();
-        voxel_octree.add_node(node1, 1).unwrap();
-        voxel_octree.add_node(node3, 0).unwrap();
-        voxel_octree.add_node(node3, 7).unwrap();
-
-        println!("{}", voxel_octree);
-        println!("{:?}", voxel_octree.serialize());
+        let mut mask : vdb::mask::Mask<1> = vdb::mask::Mask::new();
+        mask.words[0] = 30;
+        let i : u64 = 30;
+        let j = ((i & (!i + 1)) * 0x022FDD63CC95386d as u64) >> 58;
+        println!("Count On: {}", mask.countOn());
+        println!("Index: {}", j);
     }
 
     fn update(&mut self) {}
