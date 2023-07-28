@@ -5,21 +5,17 @@ use std::{
 };
 
 use cgmath;
-use cgmath::Vector3;
+use cgmath::Vector4;
 
-use packed_struct::prelude::*;
-
-#[derive(PackedStruct, Default, PartialEq, Debug)]
-#[packed_struct(bit_numbering = "msb0")]
+#[derive(PartialEq, Debug)]
 pub struct VoxelData {
-    #[packed_field(bits = "0..24")]
-    color: Vector3<f32>,
-    #[packed_field(bits = "24..32", ty = "enum")]
+    color: Vector4<u8>,
     material: Material,
 }
 
-#[derive(PrimitiveEnum_u8, Default, Clone, Copy, Debug, PartialEq)]
+#[derive(Default, Clone, Copy, Debug, PartialEq)]
 pub enum Material {
+    #[default]
     Nothing = 0,
     Solid = 1,
 }
